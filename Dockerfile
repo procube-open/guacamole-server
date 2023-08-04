@@ -190,6 +190,9 @@ RUN useradd --system --create-home --shell /sbin/nologin --uid $UID --gid $GID g
 # Run with user guacd
 USER guacd
 
+RUN mkdir /var/lib/guacamole/drives
+RUN mkdir /var/lib/guacamole/recordings
+
 # Expose the default listener port
 EXPOSE 4822
 
