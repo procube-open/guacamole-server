@@ -187,6 +187,9 @@ ARG GID=1000
 RUN groupadd --gid $GID guacd
 RUN useradd --system --create-home --shell /sbin/nologin --uid $UID --gid $GID guacd
 
+RUN mkdir /var/lib/guacamole
+RUN chown guacd:guacd /var/lib/guacamole
+
 # Run with user guacd
 USER guacd
 
