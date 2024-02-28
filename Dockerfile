@@ -169,6 +169,8 @@ COPY --from=builder ${PREFIX_DIR} ${PREFIX_DIR}
 # Bring runtime environment up to date and install runtime dependencies
 RUN apk add --no-cache                \
         ca-certificates               \
+        font-ipa                      \
+        fontconfig                    \
         ghostscript                   \
         netcat-openbsd                \
         shadow                        \
@@ -177,6 +179,8 @@ RUN apk add --no-cache                \
         ttf-liberation                \
         util-linux-login && \
     xargs apk add --no-cache < ${PREFIX_DIR}/DEPENDENCIES
+
+RUN fc-cache -f
 
 # Checks the operating status every 5 minutes with a timeout of 5 seconds
 HEALTHCHECK --interval=5m --timeout=5s CMD nc -z 127.0.0.1 4822 || exit 1
