@@ -73,6 +73,11 @@ typedef struct guac_telnet_settings {
     char* port;
 
     /**
+     * コンソールサーバーへの接続かどうか？
+     */
+    bool is_console;
+
+    /**
      * The name of the user to login as, if any. If no username is specified,
      * this will be NULL.
      */
