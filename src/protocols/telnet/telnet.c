@@ -149,13 +149,12 @@ static void guac_telnet_search_line(guac_client* client, const char* line_buffer
     guac_telnet_settings* settings = telnet_client->settings;
 
     /* コンソールサーバーアクセス時 */
-    if (settings->is_console) {
-        regex_t regex;
-        regcomp(&regex, "", REG_EXTENDED); // 適切な正規表現に置き換え
-        if (guac_telnet_regex_exec(client, &regex, "3", line_buffer)) {
-            guac_client_log(client, GUAC_LOG_DEBUG, "Value '3' sent.");
+    if (settings->console_regex != NULL && settings->console != NULL) {
+        if (guac_telnet_regex_exec(client, settings->console_regex,
+                    settings->console, line_buffer)) {
+            guac_client_log(client, GUAC_LOG_DEBUG, "Console access requested");
+            guac_telnet_regex_free(&settings->console_regex);
         }
-        regfree(&regex);
     }
 
     /* Continue search for username prompt */

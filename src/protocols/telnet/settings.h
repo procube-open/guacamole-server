@@ -43,6 +43,8 @@
  */
 #define GUAC_TELNET_DEFAULT_RECORDING_NAME "recording"
 
+#define GUAC_TELNET_DEFAULT_CONSOLE_REGEX "tty.*?>"
+
 /**
  * The regular expression to use when searching for the username/login prompt
  * if no other regular expression is specified.
@@ -75,7 +77,12 @@ typedef struct guac_telnet_settings {
     /**
      * コンソールサーバーへの接続かどうか？
      */
-    bool is_console;
+    char* console;
+
+    /**
+     * The regular expression to use when searching for the console prompt.
+     */
+    regex_t* console_regex;
 
     /**
      * The name of the user to login as, if any. If no username is specified,

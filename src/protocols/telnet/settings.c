@@ -41,7 +41,8 @@ const char* GUAC_TELNET_CLIENT_ARGS[] = {
     "username-regex",
     "password",
     "password-regex",
-    "is-console",
+    "console",
+    "console-regex",
     GUAC_TELNET_ARGV_FONT_NAME,
     GUAC_TELNET_ARGV_FONT_SIZE,
     GUAC_TELNET_ARGV_COLOR_SCHEME,
@@ -104,7 +105,9 @@ enum TELNET_ARGS_IDX {
      */
     IDX_PASSWORD_REGEX,
 
-    IDX_IS_CONSOLE,
+    IDX_CONSOLE,
+
+    IDX_CONSOLE_REGEX,
 
     /**
      * The name of the font to use within the terminal.
@@ -344,9 +347,15 @@ guac_telnet_settings* guac_telnet_parse_args(guac_user* user,
         guac_user_parse_args_string(user, GUAC_TELNET_CLIENT_ARGS, argv,
                 IDX_HOSTNAME, "");
     
-    settings->is_console =
-        guac_user_parse_args_boolean(user, GUAC_TELNET_CLIENT_ARGS, argv,
-                IDX_IS_CONSOLE, 0);
+    settings->console =
+        guac_user_parse_args_string(user, GUAC_TELNET_CLIENT_ARGS, argv,
+                IDX_CONSOLE, NULL);
+    
+    if (settings->console != NULL) {
+        settings->console_regex = guac_telnet_compile_regex(user,
+            guac_user_parse_args_string(user, GUAC_TELNET_CLIENT_ARGS, argv,
+                    IDX_CONSOLE_REGEX, GUAC_TELNET_DEFAULT_CONSOLE_REGEX));
+    }
 
     /* Read username */
     settings->username =
