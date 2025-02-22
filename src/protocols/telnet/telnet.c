@@ -155,12 +155,11 @@ static void guac_telnet_search_line(guac_client* client, const char* line_buffer
             guac_client_log(client, GUAC_LOG_DEBUG, "Console access requested");
             guac_telnet_regex_free(&settings->console_regex);
         }
-        sleep(3);
         regex_t* regex = malloc(sizeof(regex_t));
-        regcomp(regex, "Start tty connection", REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
+        regcomp(regex, "^Start tty connection$", REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
         if (guac_telnet_regex_exec(client, regex, "", line_buffer)) {
             guac_client_log(client, GUAC_LOG_DEBUG, "Console access requested");
-            guac_telnet_regex_free(&settings->console_regex);
+            guac_telnet_regex_free(&regex);
         }
     }
 
