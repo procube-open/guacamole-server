@@ -158,7 +158,7 @@ static void guac_telnet_search_line(guac_client* client, const char* line_buffer
         regex_t* regex = malloc(sizeof(regex_t));
         regcomp(regex, "^Start tty connection", REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
         if (guac_telnet_regex_exec(client, regex, "", line_buffer)) {
-            guac_telnet_regex_free(&regex)
+            guac_telnet_regex_free(&regex);
         }
     }
 
