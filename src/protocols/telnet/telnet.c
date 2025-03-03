@@ -155,11 +155,6 @@ static void guac_telnet_search_line(guac_client* client, const char* line_buffer
             guac_client_log(client, GUAC_LOG_DEBUG, "Console access requested");
             guac_telnet_regex_free(&settings->console_regex);
         }
-        regex_t* regex = malloc(sizeof(regex_t));
-        regcomp(regex, "^Start tty connection", REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
-        if (guac_telnet_regex_exec(client, regex, "", line_buffer)) {
-            guac_telnet_regex_free(&regex);
-        }
     }
 
     /* Continue search for username prompt */
@@ -257,6 +252,10 @@ static void guac_telnet_search(guac_client* client, const char* buffer, int size
                 line_buffer[length] = '\0';
                 guac_telnet_search_line(client, line_buffer);
                 length = 0;
+            }
+            else {
+                guac_telnet_client* telnet_client = (guac_telnet_client*) client->data;
+                guac_terminal_send_string(telnet_client->term, "\x0D");
             }
         }
 
