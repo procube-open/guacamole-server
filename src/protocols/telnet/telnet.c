@@ -154,11 +154,11 @@ static void guac_telnet_search_line(guac_client* client, const char* line_buffer
                     settings->console, line_buffer)) {
             guac_client_log(client, GUAC_LOG_DEBUG, "Console access requested");
             guac_telnet_regex_free(&settings->console_regex);
+            sleep(3);
+            guac_telnet_client* telnet_client = (guac_telnet_client*) client->data;
+            guac_terminal_send_string(telnet_client->term, "");
+            guac_terminal_send_string(telnet_client->term, "\x0D");
         }
-        sleep(3);
-        guac_telnet_client* telnet_client = (guac_telnet_client*) client->data;
-        guac_terminal_send_string(telnet_client->term, "");
-        guac_terminal_send_string(telnet_client->term, "\x0D");
     }
 
     /* Continue search for username prompt */
