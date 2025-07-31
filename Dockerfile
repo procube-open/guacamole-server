@@ -311,12 +311,8 @@ COPY --from=guacamole-server ${PREFIX_DIR} ${PREFIX_DIR}
 # Bring runtime environment up to date and install runtime dependencies
 RUN apk add --no-cache                \
         ca-certificates               \
-<<<<<<< HEAD
         font-ipa                      \
         fontconfig                    \
-=======
-        font-noto-cjk                 \
->>>>>>> upstream/main
         ghostscript                   \
         netcat-openbsd                \
         shadow                        \
@@ -326,13 +322,7 @@ RUN apk add --no-cache                \
         util-linux-login && \
     xargs apk add --no-cache < ${PREFIX_DIR}/DEPENDENCIES
 
-<<<<<<< HEAD
 RUN fc-cache -f
-=======
-# Runtime environment
-ENV LC_ALL=C.UTF-8
-ENV LD_LIBRARY_PATH=${PREFIX_DIR}/lib
->>>>>>> upstream/main
 
 # Checks the operating status every 5 minutes with a timeout of 5 seconds
 HEALTHCHECK --interval=5m --timeout=5s CMD nc -z 127.0.0.1 4822 || exit 1
