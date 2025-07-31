@@ -17,7 +17,6 @@
  * under the License.
  */
 
-
 #ifndef GUAC_COMMON_CURSOR_H
 #define GUAC_COMMON_CURSOR_H
 
@@ -68,7 +67,7 @@ typedef struct guac_common_cursor {
     /**
      * The size of the image data buffer, in bytes.
      */
-    int image_buffer_size;
+    size_t image_buffer_size;
 
     /**
      * The current cursor image, if any. If the mouse cursor has not yet been
@@ -118,10 +117,18 @@ typedef struct guac_common_cursor {
     int button_mask;
 
     /**
-     * The server timestamp representing the point in time when the mousr
+     * The server timestamp representing the point in time when the mouse
      * location was last updated.
      */
     guac_timestamp timestamp;
+
+    /**
+     * Lock which restricts simultaneous access to the cursor, guaranteeing
+     * ordered modifications to the cursor and that incompatible operations
+     * do not occur simultaneously. This lock is for internal use within the
+     * cursor only.
+     */
+    pthread_mutex_t _lock;
 
 } guac_common_cursor;
 
@@ -153,14 +160,14 @@ void guac_common_cursor_free(guac_common_cursor* cursor);
  * @param cursor
  *     The cursor to send.
  *
- * @param user
+ * @param client
  *     The user receiving the updated cursor.
  *
  * @param socket
  *     The socket over which the updated cursor should be sent.
  */
-void guac_common_cursor_dup(guac_common_cursor* cursor, guac_user* user,
-        guac_socket* socket);
+void guac_common_cursor_dup(
+        guac_common_cursor* cursor, guac_client* client, guac_socket* socket);
 
 /**
  * Updates the current position and button state of the mouse cursor, marking

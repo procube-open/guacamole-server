@@ -33,7 +33,35 @@
 
 #include <guacamole/argv.h>
 #include <guacamole/client.h>
+#include <guacamole/mem.h>
 #include <guacamole/recording.h>
+#include <guacamole/socket.h>
+
+/**
+ * A pending join handler implementation that will synchronize the connection
+ * state for all pending users prior to them being promoted to full user.
+ *
+ * @param client
+ *     The client whose pending users are about to be promoted.
+ *
+ * @return
+ *     Always zero.
+ */
+static int guac_ssh_join_pending_handler(guac_client* client) {
+
+    guac_ssh_client* ssh_client = (guac_ssh_client*) client->data;
+
+    /* Synchronize the terminal state to all pending users */
+    if (ssh_client->term != NULL) {
+        guac_socket* broadcast_socket = client->pending_socket;
+        guac_terminal_sync_users(ssh_client->term, client, broadcast_socket);
+        guac_ssh_send_current_argv_batch(client, broadcast_socket);
+        guac_socket_flush(broadcast_socket);
+    }
+
+    return 0;
+
+}
 
 int guac_client_init(guac_client* client) {
 
@@ -41,11 +69,12 @@ int guac_client_init(guac_client* client) {
     client->args = GUAC_SSH_CLIENT_ARGS;
 
     /* Allocate client instance data */
-    guac_ssh_client* ssh_client = calloc(1, sizeof(guac_ssh_client));
+    guac_ssh_client* ssh_client = guac_mem_zalloc(sizeof(guac_ssh_client));
     client->data = ssh_client;
 
     /* Set handlers */
     client->join_handler = guac_ssh_user_join_handler;
+    client->join_pending_handler = guac_ssh_join_pending_handler;
     client->free_handler = guac_ssh_client_free_handler;
     client->leave_handler = guac_ssh_user_leave_handler;
 
@@ -114,7 +143,7 @@ int guac_ssh_client_free_handler(guac_client* client) {
         guac_ssh_settings_free(ssh_client->settings);
 
     /* Free client structure */
-    free(ssh_client);
+    guac_mem_free(ssh_client);
 
     guac_common_ssh_uninit();
     return 0;

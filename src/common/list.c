@@ -20,12 +20,14 @@
 #include "config.h"
 #include "common/list.h"
 
+#include <guacamole/mem.h>
+
 #include <stdlib.h>
 #include <pthread.h>
 
 guac_common_list* guac_common_list_alloc() {
 
-    guac_common_list* list = malloc(sizeof(guac_common_list));
+    guac_common_list* list = guac_mem_alloc(sizeof(guac_common_list));
 
     pthread_mutex_init(&list->_lock, NULL);
     list->head = NULL;
@@ -34,8 +36,26 @@ guac_common_list* guac_common_list_alloc() {
 
 }
 
-void guac_common_list_free(guac_common_list* list) {
-    free(list);
+void guac_common_list_free(
+        guac_common_list* list,
+        guac_common_list_element_free_handler* free_element_handler) {
+
+    /* Free every element of the list */
+    guac_common_list_element* element = list->head;
+    while(element != NULL) {
+
+        guac_common_list_element* next = element->next;
+
+        if (free_element_handler != NULL)
+            free_element_handler(element->data);
+
+        guac_mem_free(element);
+        element = next;
+    }
+
+    /* Free the list itself */
+    guac_mem_free(list);
+
 }
 
 guac_common_list_element* guac_common_list_add(guac_common_list* list,
@@ -43,7 +63,7 @@ guac_common_list_element* guac_common_list_add(guac_common_list* list,
 
     /* Allocate element, initialize as new head */
     guac_common_list_element* element =
-        malloc(sizeof(guac_common_list_element));
+        guac_mem_alloc(sizeof(guac_common_list_element));
     element->data = data;
     element->next = list->head;
     element->_ptr = &(list->head);
@@ -67,7 +87,7 @@ void guac_common_list_remove(guac_common_list* list,
     if (element->next != NULL)
         element->next->_ptr = element->_ptr;
 
-    free(element);
+    guac_mem_free(element);
 
 }
 

@@ -20,8 +20,6 @@
 #include "channels/audio-input/audio-input.h"
 #include "channels/cliprdr.h"
 #include "channels/pipe-svc.h"
-#include "common/cursor.h"
-#include "common/display.h"
 #include "config.h"
 #include "input.h"
 #include "rdp.h"
@@ -36,6 +34,7 @@
 #include <guacamole/argv.h>
 #include <guacamole/audio.h>
 #include <guacamole/client.h>
+#include <guacamole/display.h>
 #include <guacamole/protocol.h>
 #include <guacamole/socket.h>
 #include <guacamole/stream.h>
@@ -68,6 +67,10 @@ int guac_rdp_user_join_handler(guac_user* user, int argc, char** argv) {
         /* Store owner's settings at client level */
         rdp_client->settings = settings;
 
+        /* Init clipboard */
+        rdp_client->clipboard =
+            guac_rdp_clipboard_alloc(user->client, settings->clipboard_buffer_size);
+
         /* Start client thread */
         if (pthread_create(&rdp_client->client_thread, NULL,
                     guac_rdp_client_thread, user->client)) {
@@ -79,22 +82,6 @@ int guac_rdp_user_join_handler(guac_user* user, int argc, char** argv) {
         /* Handle inbound audio streams if audio input is enabled */
         if (settings->enable_audio_input)
             user->audio_handler = guac_rdp_audio_handler;
-
-    }
-
-    /* If not owner, synchronize with current state */
-    else {
-
-        /* Synchronize any audio stream */
-        if (rdp_client->audio)
-            guac_audio_stream_add_user(rdp_client->audio, user);
-
-        /* Bring user up to date with any registered static channels */
-        guac_rdp_pipe_svc_send_pipes(user);
-
-        /* Synchronize with current display */
-        guac_common_display_dup(rdp_client->display, user, user->socket);
-        guac_socket_flush(user->socket);
 
     }
 
@@ -167,7 +154,7 @@ int guac_rdp_user_leave_handler(guac_user* user) {
 
     /* Update shared cursor state if the display still exists */
     if (rdp_client->display != NULL)
-        guac_common_cursor_remove_user(rdp_client->display->cursor, user);
+        guac_display_notify_user_left(rdp_client->display, user);
 
     /* Free settings if not owner (owner settings will be freed with client) */
     if (!user->owner) {

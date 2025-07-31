@@ -26,15 +26,16 @@
 
 #include <cairo/cairo.h>
 #include <guacamole/client.h>
+#include <guacamole/mem.h>
 #include <guacamole/protocol.h>
 #include <guacamole/socket.h>
 #include <guacamole/timestamp.h>
 #include <guacamole/user.h>
 
+#include <pthread.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-
 
 /**
  * Allocates a cursor as well as an image buffer where the cursor is rendered.
@@ -47,7 +48,7 @@
  */
 guac_common_cursor* guac_common_cursor_alloc(guac_client* client) {
 
-    guac_common_cursor* cursor = malloc(sizeof(guac_common_cursor));
+    guac_common_cursor* cursor = guac_mem_alloc(sizeof(guac_common_cursor));
     if (cursor == NULL)
         return NULL;
 
@@ -57,7 +58,7 @@ guac_common_cursor* guac_common_cursor_alloc(guac_client* client) {
 
     /* Allocate initial image buffer */
     cursor->image_buffer_size = GUAC_COMMON_CURSOR_DEFAULT_SIZE;
-    cursor->image_buffer = malloc(cursor->image_buffer_size);
+    cursor->image_buffer = guac_mem_alloc(cursor->image_buffer_size);
 
     /* No cursor image yet */
     cursor->width = 0;
@@ -74,18 +75,22 @@ guac_common_cursor* guac_common_cursor_alloc(guac_client* client) {
     cursor->x = 0;
     cursor->y = 0;
 
+    pthread_mutex_init(&(cursor->_lock), NULL);
+
     return cursor;
 
 }
 
 void guac_common_cursor_free(guac_common_cursor* cursor) {
 
+    pthread_mutex_destroy(&(cursor->_lock));
+
     guac_client* client = cursor->client;
     guac_layer* buffer = cursor->buffer;
     cairo_surface_t* surface = cursor->surface;
 
     /* Free image buffer and surface */
-    free(cursor->image_buffer);
+    guac_mem_free(cursor->image_buffer);
     if (surface != NULL)
         cairo_surface_destroy(surface);
 
@@ -95,12 +100,14 @@ void guac_common_cursor_free(guac_common_cursor* cursor) {
     /* Return buffer to pool */
     guac_client_free_buffer(client, buffer);
 
-    free(cursor);
+    guac_mem_free(cursor);
 
 }
 
-void guac_common_cursor_dup(guac_common_cursor* cursor, guac_user* user,
-        guac_socket* socket) {
+void guac_common_cursor_dup(
+        guac_common_cursor* cursor, guac_client* client, guac_socket* socket) {
+
+    pthread_mutex_lock(&(cursor->_lock));
 
     /* Synchronize location */
     guac_protocol_send_mouse(socket, cursor->x, cursor->y, cursor->button_mask,
@@ -111,13 +118,15 @@ void guac_common_cursor_dup(guac_common_cursor* cursor, guac_user* user,
         guac_protocol_send_size(socket, cursor->buffer,
                 cursor->width, cursor->height);
 
-        guac_user_stream_png(user, socket, GUAC_COMP_SRC,
+        guac_client_stream_png(client, socket, GUAC_COMP_SRC,
                 cursor->buffer, 0, 0, cursor->surface);
 
         guac_protocol_send_cursor(socket,
                 cursor->hotspot_x, cursor->hotspot_y,
                 cursor->buffer, 0, 0, cursor->width, cursor->height);
     }
+
+    pthread_mutex_unlock(&(cursor->_lock));
 
     guac_socket_flush(socket);
 
@@ -154,6 +163,8 @@ static void* guac_common_cursor_broadcast_state(guac_user* user,
 void guac_common_cursor_update(guac_common_cursor* cursor, guac_user* user,
         int x, int y, int button_mask) {
 
+    pthread_mutex_lock(&(cursor->_lock));
+
     /* Update current user of cursor */
     cursor->user = user;
 
@@ -168,6 +179,8 @@ void guac_common_cursor_update(guac_common_cursor* cursor, guac_user* user,
     /* Notify all other users of change in cursor state */
     guac_client_foreach_user(cursor->client,
             guac_common_cursor_broadcast_state, cursor);
+
+    pthread_mutex_unlock(&(cursor->_lock));
 
 }
 
@@ -193,17 +206,17 @@ void guac_common_cursor_update(guac_common_cursor* cursor, guac_user* user,
 static void guac_common_cursor_resize(guac_common_cursor* cursor,
         int width, int height, int stride) {
 
-    int minimum_size = height * stride;
+    size_t minimum_size = guac_mem_ckd_mul_or_die(height, stride);
 
     /* Grow image buffer if necessary */
     if (cursor->image_buffer_size < minimum_size) {
 
         /* Calculate new size */
-        cursor->image_buffer_size = minimum_size*2;
+        cursor->image_buffer_size = guac_mem_ckd_mul_or_die(minimum_size, 2);
 
         /* Destructively reallocate image buffer */
-        free(cursor->image_buffer);
-        cursor->image_buffer = malloc(cursor->image_buffer_size);
+        guac_mem_free(cursor->image_buffer);
+        cursor->image_buffer = guac_mem_alloc(cursor->image_buffer_size);
 
     }
 
@@ -211,6 +224,8 @@ static void guac_common_cursor_resize(guac_common_cursor* cursor,
 
 void guac_common_cursor_set_argb(guac_common_cursor* cursor, int hx, int hy,
     unsigned const char* data, int width, int height, int stride) {
+
+    pthread_mutex_lock(&(cursor->_lock));
 
     /* Copy image data */
     guac_common_cursor_resize(cursor, width, height, stride);
@@ -241,6 +256,8 @@ void guac_common_cursor_set_argb(guac_common_cursor* cursor, int hx, int hy,
             cursor->buffer, 0, 0, cursor->width, cursor->height);
 
     guac_socket_flush(cursor->client->socket);
+
+    pthread_mutex_unlock(&(cursor->_lock));
 
 }
 
@@ -298,9 +315,13 @@ void guac_common_cursor_set_blank(guac_common_cursor* cursor) {
 void guac_common_cursor_remove_user(guac_common_cursor* cursor,
         guac_user* user) {
 
+    pthread_mutex_lock(&(cursor->_lock));
+
     /* Disassociate from given user */
     if (cursor->user == user)
         cursor->user = NULL;
+
+    pthread_mutex_unlock(&(cursor->_lock));
 
 }
 

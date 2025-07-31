@@ -22,9 +22,11 @@
 #include "argv.h"
 #include "client.h"
 #include "common/defaults.h"
+#include "common/clipboard.h"
 #include "settings.h"
 #include "terminal/terminal.h"
 
+#include <guacamole/mem.h>
 #include <guacamole/user.h>
 #include <guacamole/wol-constants.h>
 
@@ -37,6 +39,7 @@ const char* GUAC_SSH_CLIENT_ARGS[] = {
     "hostname",
     "host-key",
     "port",
+    "timeout",
     "username",
     "password",
     GUAC_SSH_ARGV_FONT_NAME,
@@ -56,12 +59,14 @@ const char* GUAC_SSH_CLIENT_ARGS[] = {
     "typescript-path",
     "typescript-name",
     "create-typescript-path",
+    "typescript-write-existing",
     "recording-path",
     "recording-name",
     "recording-exclude-output",
     "recording-exclude-mouse",
     "recording-include-keys",
     "create-recording-path",
+    "recording-write-existing",
     "read-only",
     "server-alive-interval",
     "backspace",
@@ -69,6 +74,7 @@ const char* GUAC_SSH_CLIENT_ARGS[] = {
     "scrollback",
     "locale",
     "timezone",
+    "clipboard-buffer-size",
     "disable-copy",
     "disable-paste",
     "wol-send-packet",
@@ -95,6 +101,11 @@ enum SSH_ARGS_IDX {
      * The port to connect to. Optional.
      */
     IDX_PORT,
+
+    /**
+     * The timeout of the connection attempt, in seconds. Optional.
+     */
+    IDX_TIMEOUT,
 
     /**
      * The name of the user to login as. Optional.
@@ -197,6 +208,12 @@ enum SSH_ARGS_IDX {
     IDX_CREATE_TYPESCRIPT_PATH,
 
     /**
+     * Whether existing files should be appended to when creating a new
+     * typescript. Disabled by default.
+     */
+    IDX_TYPESCRIPT_WRITE_EXISTING,
+
+    /**
      * The full absolute path to the directory in which screen recordings
      * should be written.
      */
@@ -239,6 +256,12 @@ enum SSH_ARGS_IDX {
      * created if it does not yet exist.
      */
     IDX_CREATE_RECORDING_PATH,
+
+    /**
+     * Whether existing files should be appended to when creating a new recording.
+     * Disabled by default.
+     */
+    IDX_RECORDING_WRITE_EXISTING,
 
     /**
      * "true" if this connection should be read-only (user input should be
@@ -288,6 +311,11 @@ enum SSH_ARGS_IDX {
      * https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
      */
     IDX_TIMEZONE,
+
+    /**
+     * The maximum number of bytes to allow within the clipboard.
+     */
+    IDX_CLIPBOARD_BUFFER_SIZE,
 
     /**
      * Whether outbound clipboard access should be blocked. If set to "true",
@@ -351,7 +379,7 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
         return NULL;
     }
 
-    guac_ssh_settings* settings = calloc(1, sizeof(guac_ssh_settings));
+    guac_ssh_settings* settings = guac_mem_zalloc(sizeof(guac_ssh_settings));
 
     /* Read parameters */
     settings->hostname =
@@ -439,6 +467,11 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
         guac_user_parse_args_string(user, GUAC_SSH_CLIENT_ARGS, argv,
                 IDX_PORT, GUAC_SSH_DEFAULT_PORT);
 
+    /* Parse the timeout value. */
+    settings->timeout =
+        guac_user_parse_args_int(user, GUAC_SSH_CLIENT_ARGS, argv,
+                IDX_TIMEOUT, GUAC_SSH_DEFAULT_TIMEOUT);
+
     /* Read-only mode */
     settings->read_only =
         guac_user_parse_args_boolean(user, GUAC_SSH_CLIENT_ARGS, argv,
@@ -463,6 +496,11 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
     settings->create_typescript_path =
         guac_user_parse_args_boolean(user, GUAC_SSH_CLIENT_ARGS, argv,
                 IDX_CREATE_TYPESCRIPT_PATH, false);
+
+    /* Parse allow write existing file flag */
+    settings->typescript_write_existing =
+        guac_user_parse_args_boolean(user, GUAC_SSH_CLIENT_ARGS, argv,
+                IDX_TYPESCRIPT_WRITE_EXISTING, false);
 
     /* Read recording path */
     settings->recording_path =
@@ -494,6 +532,11 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
         guac_user_parse_args_boolean(user, GUAC_SSH_CLIENT_ARGS, argv,
                 IDX_CREATE_RECORDING_PATH, false);
 
+    /* Parse allow write existing file flag */
+    settings->recording_write_existing =
+        guac_user_parse_args_boolean(user, GUAC_SSH_CLIENT_ARGS, argv,
+                IDX_RECORDING_WRITE_EXISTING, false);
+
     /* Parse server alive interval */
     settings->server_alive_interval =
         guac_user_parse_args_int(user, GUAC_SSH_CLIENT_ARGS, argv,
@@ -518,6 +561,27 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
     settings->timezone =
         guac_user_parse_args_string(user, GUAC_SSH_CLIENT_ARGS, argv,
                 IDX_TIMEZONE, user->info.timezone);
+
+    /* Set the maximum number of bytes to allow within the clipboard. */
+    settings->clipboard_buffer_size =
+        guac_user_parse_args_int(user, GUAC_SSH_CLIENT_ARGS, argv,
+                IDX_CLIPBOARD_BUFFER_SIZE, 0);
+
+    /* Use default clipboard buffer size if given one is invalid. */
+    if (settings->clipboard_buffer_size < GUAC_COMMON_CLIPBOARD_MIN_LENGTH) {
+        settings->clipboard_buffer_size = GUAC_COMMON_CLIPBOARD_MIN_LENGTH;
+        guac_user_log(user, GUAC_LOG_INFO, "Unspecified or invalid clipboard buffer "
+                "size: \"%s\". Using the default minimum size: %i.",
+                argv[IDX_CLIPBOARD_BUFFER_SIZE],
+                settings->clipboard_buffer_size);
+    }
+    else if (settings->clipboard_buffer_size > GUAC_COMMON_CLIPBOARD_MAX_LENGTH) {
+        settings->clipboard_buffer_size = GUAC_COMMON_CLIPBOARD_MAX_LENGTH;
+        guac_user_log(user, GUAC_LOG_WARNING, "Invalid clipboard buffer "
+                "size: \"%s\". Using the default maximum size: %i.",
+                argv[IDX_CLIPBOARD_BUFFER_SIZE],
+                settings->clipboard_buffer_size);
+    }
 
     /* Parse clipboard copy disable flag */
     settings->disable_copy =
@@ -568,49 +632,49 @@ guac_ssh_settings* guac_ssh_parse_args(guac_user* user,
 void guac_ssh_settings_free(guac_ssh_settings* settings) {
 
     /* Free network connection information */
-    free(settings->hostname);
-    free(settings->host_key);
-    free(settings->port);
+    guac_mem_free(settings->hostname);
+    guac_mem_free(settings->host_key);
+    guac_mem_free(settings->port);
 
     /* Free credentials */
-    free(settings->username);
-    free(settings->password);
-    free(settings->key_base64);
-    free(settings->key_passphrase);
-    free(settings->public_key_base64);
+    guac_mem_free(settings->username);
+    guac_mem_free(settings->password);
+    guac_mem_free(settings->key_base64);
+    guac_mem_free(settings->key_passphrase);
+    guac_mem_free(settings->public_key_base64);
 
     /* Free display preferences */
-    free(settings->font_name);
-    free(settings->color_scheme);
+    guac_mem_free(settings->font_name);
+    guac_mem_free(settings->color_scheme);
 
     /* Free requested command */
-    free(settings->command);
+    guac_mem_free(settings->command);
 
     /* Free SFTP settings */
-    free(settings->sftp_root_directory);
+    guac_mem_free(settings->sftp_root_directory);
 
     /* Free typescript settings */
-    free(settings->typescript_name);
-    free(settings->typescript_path);
+    guac_mem_free(settings->typescript_name);
+    guac_mem_free(settings->typescript_path);
 
     /* Free screen recording settings */
-    free(settings->recording_name);
-    free(settings->recording_path);
+    guac_mem_free(settings->recording_name);
+    guac_mem_free(settings->recording_path);
 
     /* Free terminal emulator type. */
-    free(settings->terminal_type);
+    guac_mem_free(settings->terminal_type);
 
     /* Free locale */
-    free(settings->locale);
+    guac_mem_free(settings->locale);
 
     /* Free the client timezone. */
-    free(settings->timezone);
+    guac_mem_free(settings->timezone);
     
     /* Free Wake-on-LAN settings. */
-    free(settings->wol_mac_addr);
-    free(settings->wol_broadcast_addr);
+    guac_mem_free(settings->wol_mac_addr);
+    guac_mem_free(settings->wol_broadcast_addr);
 
     /* Free overall structure */
-    free(settings);
+    guac_mem_free(settings);
 
 }

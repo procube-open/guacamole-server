@@ -27,6 +27,7 @@
 
 #include <guacamole/client.h>
 #include <guacamole/error.h>
+#include <guacamole/mem.h>
 #include <guacamole/parser.h>
 #include <guacamole/plugin.h>
 #include <guacamole/protocol.h>
@@ -67,13 +68,14 @@
 static int __write_all(int fd, char* buffer, int length) {
 
     /* Repeatedly write() until all data is written */
-    while (length > 0) {
+    int remaining_length = length;
+    while (remaining_length > 0) {
 
-        int written = write(fd, buffer, length);
+        int written = write(fd, buffer, remaining_length);
         if (written < 0)
             return -1;
 
-        length -= written;
+        remaining_length -= written;
         buffer += written;
 
     }
@@ -150,7 +152,7 @@ void* guacd_connection_io_thread(void* data) {
     /* Clean up */
     guac_socket_free(params->socket);
     close(params->fd);
-    free(params);
+    guac_mem_free(params);
 
     return NULL;
 
@@ -201,7 +203,7 @@ static int guacd_add_user(guacd_proc* proc, guac_parser* parser, guac_socket* so
     /* Close our end of the process file descriptor */
     close(proc_fd);
 
-    guacd_connection_io_thread_params* params = malloc(sizeof(guacd_connection_io_thread_params));
+    guacd_connection_io_thread_params* params = guac_mem_alloc(sizeof(guacd_connection_io_thread_params));
     params->parser = parser;
     params->socket = socket;
     params->fd = user_fd;
@@ -352,7 +354,7 @@ static int guacd_route_connection(guacd_proc_map* map, guac_socket* socket) {
 
         /* Clean up */
         close(proc->fd_socket);
-        free(proc);
+        guac_mem_free(proc);
 
     }
 
@@ -380,7 +382,7 @@ void* guacd_connection_thread(void* data) {
         if (socket == NULL) {
             guacd_log_guac_error(GUAC_LOG_ERROR, "Unable to set up SSL/TLS");
             close(connected_socket_fd);
-            free(params);
+            guac_mem_free(params);
             return NULL;
         }
     }
@@ -396,7 +398,7 @@ void* guacd_connection_thread(void* data) {
     if (guacd_route_connection(map, socket))
         guac_socket_free(socket);
 
-    free(params);
+    guac_mem_free(params);
     return NULL;
 
 }

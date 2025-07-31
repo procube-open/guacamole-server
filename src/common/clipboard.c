@@ -21,6 +21,7 @@
 #include "common/clipboard.h"
 
 #include <guacamole/client.h>
+#include <guacamole/mem.h>
 #include <guacamole/protocol.h>
 #include <guacamole/stream.h>
 #include <guacamole/string.h>
@@ -29,14 +30,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-guac_common_clipboard* guac_common_clipboard_alloc() {
+guac_common_clipboard* guac_common_clipboard_alloc(int buffer_size) {
 
-    guac_common_clipboard* clipboard = malloc(sizeof(guac_common_clipboard));
+    guac_common_clipboard* clipboard = guac_mem_alloc(sizeof(guac_common_clipboard));
 
     /* Init clipboard */
     clipboard->mimetype[0] = '\0';
-    clipboard->buffer = malloc(GUAC_COMMON_CLIPBOARD_MAX_LENGTH);
-    clipboard->available = GUAC_COMMON_CLIPBOARD_MAX_LENGTH;
+    clipboard->buffer = guac_mem_alloc(buffer_size);
+    clipboard->available = buffer_size;
     clipboard->length = 0;
 
     pthread_mutex_init(&(clipboard->lock), NULL);
@@ -51,10 +52,11 @@ void guac_common_clipboard_free(guac_common_clipboard* clipboard) {
     pthread_mutex_destroy(&(clipboard->lock));
 
     /* Free buffer */
-    free(clipboard->buffer);
+    guac_mem_free(clipboard->buffer);
 
     /* Free base structure */
-    free(clipboard);
+    guac_mem_free(clipboard);
+
 }
 
 /**
@@ -112,6 +114,7 @@ static void* __send_user_clipboard(guac_user* user, void* data) {
 
     /* End stream */
     guac_protocol_send_end(user->socket, stream);
+    guac_socket_flush(user->socket);
     guac_user_free_stream(user, stream);
 
     return NULL;

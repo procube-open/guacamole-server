@@ -17,7 +17,6 @@
  * under the License.
  */
 
-
 #ifndef _GUAC_TERMINAL_H
 #define _GUAC_TERMINAL_H
 
@@ -180,6 +179,11 @@ typedef guac_stream* guac_terminal_file_download_handler(guac_client* client, ch
  * to create a new options struct, use guac_terminal_options_create.
  */
 typedef struct guac_terminal_options {
+
+    /**
+     * The maximum number of bytes to allow within the clipboard.
+     */
+    int clipboard_buffer_size;
 
     /**
      * Whether copying from the terminal clipboard should be blocked. If set,
@@ -413,7 +417,7 @@ void guac_terminal_notify(guac_terminal* terminal);
  * @return
  *     A newly-allocated string containing a single line of input read from the
  *     provided terminal's STDIN. This string must eventually be manually
- *     freed with a call to free().
+ *     freed with a call to guac_mem_free().
  */
 char* guac_terminal_prompt(guac_terminal* terminal, const char* title,
         bool echo);
@@ -619,6 +623,9 @@ int guac_terminal_sendf(guac_terminal* term, const char* format, ...);
  * connection. All instructions necessary to replicate state are sent over the
  * given socket.
  *
+ * @deprecated The guac_terminal_sync_users method should be used when
+ * duplicating display state to a set of users.
+ *
  * @param term
  *     The terminal emulator associated with the connection being joined.
  *
@@ -631,6 +638,24 @@ int guac_terminal_sendf(guac_terminal* term, const char* format, ...);
  */
 void guac_terminal_dup(guac_terminal* term, guac_user* user,
         guac_socket* socket);
+
+/**
+ * Replicates the current display state to one or more users that are joining
+ * the connection. All instructions necessary to replicate state are sent over
+ * the given socket. The set of users receiving these instructions is
+ * determined solely by the socket chosen.
+ *
+ * @param term
+ *     The terminal whose state should be synchronized to the users.
+ *
+ * @param client
+ *     The client associated with the users to be synchronized.
+ *
+ * @param socket
+ *     The socket to which the terminal state will be broadcast.
+ */
+void guac_terminal_sync_users(
+        guac_terminal* term, guac_client* client, guac_socket* socket);
 
 /**
  * Resize the client display and terminal to the given pixel dimensions.
@@ -727,13 +752,18 @@ void guac_terminal_clipboard_append(guac_terminal* terminal,
 void guac_terminal_remove_user(guac_terminal* terminal, guac_user* user);
 
 /**
- * Requests that the terminal write all output to a new pair of typescript
- * files within the given path and using the given base name. Terminal output
- * will be written to these new files, along with timing information. If the
- * create_path flag is non-zero, the given path will be created if it does not
- * yet exist. If creation of the typescript files or path fails, error messages
- * will automatically be logged, and no typescript will be written. The
- * typescript will automatically be closed once the terminal is freed.
+ * Requests that the terminal write all output to a pair of typescript
+ * files within the given path and using the given base name. If
+ * allow_write_existing is non-zero, these may be existing files; otherwise,
+ * the existing files may not be written to, and a non-zero value will be
+ * returned.
+ *
+ * Terminal output will be written to the files, along with timing information.
+ * If the create_path flag is non-zero, the given path will be created if it
+ * does not yet exist. If creation of the typescript files or path fails,
+ * error messages will automatically be logged, and no typescript will be
+ * written. The typescript will automatically be closed once the terminal is
+ * freed.
  *
  * @param term
  *     The terminal whose output should be written to a typescript.
@@ -751,12 +781,16 @@ void guac_terminal_remove_user(guac_terminal* terminal, guac_user* user);
  *     written, or non-zero if the path should be created if it does not yet
  *     exist.
  *
+ * @param allow_write_existing
+ *     Non-zero if writing to existing files should be allowed, or zero
+ *     otherwise.
+ *
  * @return
  *     Zero if the typescript files have been successfully created and a
  *     typescript will be written, non-zero otherwise.
  */
 int guac_terminal_create_typescript(guac_terminal* term, const char* path,
-        const char* name, int create_path);
+        const char* name, int create_path, int allow_write_existing);
 
 /**
  * Immediately applies the given color scheme to the given terminal, overriding

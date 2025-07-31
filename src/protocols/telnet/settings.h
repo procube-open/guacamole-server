@@ -34,6 +34,12 @@
 #define GUAC_TELNET_DEFAULT_PORT "23"
 
 /**
+ * The default number of seconds to wait for a successful connection before
+ * timing out.
+ */
+#define GUAC_TELNET_DEFAULT_TIMEOUT 10
+
+/**
  * The filename to use for the typescript, if not specified.
  */
 #define GUAC_TELNET_DEFAULT_TYPESCRIPT_NAME "typescript" 
@@ -75,6 +81,7 @@ typedef struct guac_telnet_settings {
     char* port;
 
     /**
+<<<<<<< HEAD
      * コンソールサーバーへの接続かどうか？
      */
     char* console;
@@ -83,6 +90,11 @@ typedef struct guac_telnet_settings {
      * The regular expression to use when searching for the console prompt.
      */
     regex_t* console_regex;
+=======
+     * The number of seconds to wait for a connection before timing out.
+     */
+    int timeout;
+>>>>>>> upstream/main
 
     /**
      * The name of the user to login as, if any. If no username is specified,
@@ -167,6 +179,11 @@ typedef struct guac_telnet_settings {
     int resolution;
 
     /**
+     * The maximum number of bytes to allow within the clipboard.
+     */
+    int clipboard_buffer_size;
+
+    /**
      * Whether outbound clipboard access should be blocked. If set, it will not
      * be possible to copy data from the terminal to the client using the
      * clipboard.
@@ -196,6 +213,12 @@ typedef struct guac_telnet_settings {
      * not already exist.
      */
     bool create_typescript_path;
+
+    /**
+     * Whether existing files should be appended to when creating a new
+     * typescript. Disabled by default.
+     */
+    bool typescript_write_existing;
 
     /**
      * The path in which the screen recording should be saved, if enabled. If
@@ -239,6 +262,12 @@ typedef struct guac_telnet_settings {
      * as passwords, credit card numbers, etc.
      */
     bool recording_include_keys;
+
+    /**
+     * Whether existing files should be appended to when creating a new recording.
+     * Disabled by default.
+     */
+    bool recording_write_existing;
 
     /**
      * The ASCII code, as an integer, that the telnet client will use when the

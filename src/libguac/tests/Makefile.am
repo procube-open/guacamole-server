@@ -33,15 +33,36 @@ ACLOCAL_AMFLAGS = -I m4
 check_PROGRAMS = test_libguac
 TESTS = $(check_PROGRAMS)
 
+noinst_HEADERS =                     \
+    assert-signal.h
+
 test_libguac_SOURCES =               \
     client/buffer_pool.c             \
     client/layer_pool.c              \
+    fifo/fifo.c                      \
+    flag/flag.c                      \
     id/generate.c                    \
+    mem/alloc.c                      \
+    mem/ckd_add.c                    \
+    mem/ckd_add_or_die.c             \
+    mem/ckd_mul.c                    \
+    mem/ckd_mul_or_die.c             \
+    mem/ckd_sub.c                    \
+    mem/ckd_sub_or_die.c             \
+    mem/free.c                       \
+    mem/realloc.c                    \
+    mem/realloc_or_die.c             \
+    mem/zalloc.c                     \
     parser/append.c                  \
     parser/read.c                    \
     pool/next_free.c                 \
     protocol/base64_decode.c         \
     protocol/guac_protocol_version.c \
+    rect/align.c                     \
+    rect/constrain.c                 \
+    rect/extend.c                    \
+    rect/init.c                      \
+    rect/intersects.c                \
     socket/fd_send_instruction.c     \
     socket/nested_send_instruction.c \
     string/strdup.c                  \
@@ -53,7 +74,6 @@ test_libguac_SOURCES =               \
     unicode/read.c                   \
     unicode/strlen.c                 \
     unicode/write.c
-
 
 test_libguac_CFLAGS =       \
     -Werror -Wall -pedantic \

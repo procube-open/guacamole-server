@@ -21,6 +21,7 @@
 #include "settings.h"
 #include "terminal/terminal.h"
 
+#include <guacamole/mem.h>
 #include <guacamole/user.h>
 
 #include <stdlib.h>
@@ -44,15 +45,18 @@ const char* GUAC_KUBERNETES_CLIENT_ARGS[] = {
     "typescript-path",
     "typescript-name",
     "create-typescript-path",
+    "typescript-write-existing",
     "recording-path",
     "recording-name",
     "recording-exclude-output",
     "recording-exclude-mouse",
     "recording-include-keys",
     "create-recording-path",
+    "recording-write-existing",
     "read-only",
     "backspace",
     "scrollback",
+    "clipboard-buffer-size",
     "disable-copy",
     "disable-paste",
     NULL
@@ -166,6 +170,12 @@ enum KUBERNETES_ARGS_IDX {
     IDX_CREATE_TYPESCRIPT_PATH,
 
     /**
+     * Whether existing files should be appended to when creating a new
+     * typescript. Disabled by default.
+     */
+    IDX_TYPESCRIPT_WRITE_EXISTING,
+
+    /**
      * The full absolute path to the directory in which screen recordings
      * should be written.
      */
@@ -210,6 +220,12 @@ enum KUBERNETES_ARGS_IDX {
     IDX_CREATE_RECORDING_PATH,
 
     /**
+     * Whether existing files should be appended to when creating a new recording.
+     * Disabled by default.
+     */
+    IDX_RECORDING_WRITE_EXISTING,
+
+    /**
      * "true" if this connection should be read-only (user input should be
      * dropped), "false" or blank otherwise.
      */
@@ -225,6 +241,11 @@ enum KUBERNETES_ARGS_IDX {
      * The maximum size of the scrollback buffer in rows.
      */
     IDX_SCROLLBACK,
+
+    /**
+     * The maximum number of bytes to allow within the clipboard.
+     */
+    IDX_CLIPBOARD_BUFFER_SIZE,
 
     /**
      * Whether outbound clipboard access should be blocked. If set to "true",
@@ -255,7 +276,7 @@ guac_kubernetes_settings* guac_kubernetes_parse_args(guac_user* user,
     }
 
     guac_kubernetes_settings* settings =
-        calloc(1, sizeof(guac_kubernetes_settings));
+        guac_mem_zalloc(sizeof(guac_kubernetes_settings));
 
     /* Read hostname */
     settings->hostname =
@@ -358,6 +379,11 @@ guac_kubernetes_settings* guac_kubernetes_parse_args(guac_user* user,
         guac_user_parse_args_boolean(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
                 IDX_CREATE_TYPESCRIPT_PATH, false);
 
+    /* Parse allow write existing file flag */
+    settings->typescript_write_existing =
+        guac_user_parse_args_boolean(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
+                IDX_TYPESCRIPT_WRITE_EXISTING, false);
+
     /* Read recording path */
     settings->recording_path =
         guac_user_parse_args_string(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
@@ -388,10 +414,36 @@ guac_kubernetes_settings* guac_kubernetes_parse_args(guac_user* user,
         guac_user_parse_args_boolean(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
                 IDX_CREATE_RECORDING_PATH, false);
 
+    /* Parse allow write existing file flag */
+    settings->recording_write_existing =
+        guac_user_parse_args_boolean(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
+                IDX_RECORDING_WRITE_EXISTING, false);
+
     /* Parse backspace key code */
     settings->backspace =
         guac_user_parse_args_int(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
                 IDX_BACKSPACE, GUAC_TERMINAL_DEFAULT_BACKSPACE);
+
+    /* Set the maximum number of bytes to allow within the clipboard. */
+    settings->clipboard_buffer_size =
+        guac_user_parse_args_int(user, GUAC_KUBERNETES_CLIENT_ARGS, argv,
+                IDX_CLIPBOARD_BUFFER_SIZE, 0);
+
+    /* Use default clipboard buffer size if given one is invalid. */
+    if (settings->clipboard_buffer_size < GUAC_COMMON_CLIPBOARD_MIN_LENGTH) {
+        settings->clipboard_buffer_size = GUAC_COMMON_CLIPBOARD_MIN_LENGTH;
+        guac_user_log(user, GUAC_LOG_INFO, "Unspecified or invalid clipboard buffer "
+                "size: \"%s\". Using the default minimum size: %i.",
+                argv[IDX_CLIPBOARD_BUFFER_SIZE],
+                settings->clipboard_buffer_size);
+    }
+    else if (settings->clipboard_buffer_size > GUAC_COMMON_CLIPBOARD_MAX_LENGTH) {
+        settings->clipboard_buffer_size = GUAC_COMMON_CLIPBOARD_MAX_LENGTH;
+        guac_user_log(user, GUAC_LOG_WARNING, "Invalid clipboard buffer "
+                "size: \"%s\". Using the default maximum size: %i.",
+                argv[IDX_CLIPBOARD_BUFFER_SIZE],
+                settings->clipboard_buffer_size);
+    }
 
     /* Parse clipboard copy disable flag */
     settings->disable_copy =
@@ -411,35 +463,35 @@ guac_kubernetes_settings* guac_kubernetes_parse_args(guac_user* user,
 void guac_kubernetes_settings_free(guac_kubernetes_settings* settings) {
 
     /* Free network connection information */
-    free(settings->hostname);
+    guac_mem_free(settings->hostname);
 
     /* Free Kubernetes pod/container details */
-    free(settings->kubernetes_namespace);
-    free(settings->kubernetes_pod);
-    free(settings->kubernetes_container);
+    guac_mem_free(settings->kubernetes_namespace);
+    guac_mem_free(settings->kubernetes_pod);
+    guac_mem_free(settings->kubernetes_container);
 
     /* Free Kubernetes exec command */
-    free(settings->exec_command);
+    guac_mem_free(settings->exec_command);
 
     /* Free SSL/TLS details */
-    free(settings->client_cert);
-    free(settings->client_key);
-    free(settings->ca_cert);
+    guac_mem_free(settings->client_cert);
+    guac_mem_free(settings->client_key);
+    guac_mem_free(settings->ca_cert);
 
     /* Free display preferences */
-    free(settings->font_name);
-    free(settings->color_scheme);
+    guac_mem_free(settings->font_name);
+    guac_mem_free(settings->color_scheme);
 
     /* Free typescript settings */
-    free(settings->typescript_name);
-    free(settings->typescript_path);
+    guac_mem_free(settings->typescript_name);
+    guac_mem_free(settings->typescript_path);
 
     /* Free screen recording settings */
-    free(settings->recording_name);
-    free(settings->recording_path);
+    guac_mem_free(settings->recording_name);
+    guac_mem_free(settings->recording_path);
 
     /* Free overall structure */
-    free(settings);
+    guac_mem_free(settings);
 
 }
 

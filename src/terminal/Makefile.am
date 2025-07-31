@@ -77,7 +77,7 @@ libguac_terminal_la_LIBADD = \
     @LIBGUAC_LTLIB@
 
 libguac_terminal_la_LDFLAGS = \
-    -version-info 0:0:0       \
+    -version-info 2:0:0       \
     -no-undefined             \
     @CAIRO_LIBS@              \
     @MATH_LIBS@               \

@@ -26,6 +26,8 @@
 #include "log.h"
 #include "proc-map.h"
 
+#include <guacamole/mem.h>
+
 #ifdef ENABLE_SSL
 #include <openssl/ssl.h>
 #endif
@@ -35,6 +37,8 @@
 #include <libgen.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <netinet/tcp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +47,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define GUACD_DEV_NULL "/dev/null"
@@ -82,7 +87,7 @@ static int redirect_fd(int fd, int flags) {
 
 /**
  * Turns the current process into a daemon through a series of fork() calls.
- * The standard I/O file desriptors for STDIN, STDOUT, and STDERR will be
+ * The standard I/O file descriptors for STDIN, STDOUT, and STDERR will be
  * redirected to /dev/null, and the working directory is changed to root.
  * Execution within the caller of this function will terminate before this
  * function returns, while execution within the daemonized child process will
@@ -211,8 +216,7 @@ static void guacd_openssl_init_locks(int count) {
     int i;
 
     /* Allocate required number of locks */
-    guacd_openssl_locks =
-        malloc(sizeof(pthread_mutex_t) * count);
+    guacd_openssl_locks = guac_mem_alloc(sizeof(pthread_mutex_t), count);
 
     /* Initialize each lock */
     for (i=0; i < count; i++)
@@ -239,11 +243,54 @@ static void guacd_openssl_free_locks(int count) {
         pthread_mutex_destroy(&(guacd_openssl_locks[i]));
 
     /* Free lock array */
-    free(guacd_openssl_locks);
+    guac_mem_free(guacd_openssl_locks);
 
 }
 #endif
 #endif
+
+/**
+ * A flag that, if non-zero, indicates that the daemon should immediately stop
+ * accepting new connections.
+ */
+int stop_everything = 0;
+
+/**
+ * A signal handler that will set a flag telling the daemon to immediately stop
+ * accepting new connections. Note that the signal itself will cause any pending
+ * accept() calls to be interrupted, causing the daemon to unlock and begin
+ * cleaning up.
+ *
+ * @param signal
+ *     The signal that was received. Unused in this function since only
+ *     signals that should result in stopping the daemon should invoke this.
+ */
+static void signal_stop_handler(int signal) {
+
+    /* Instruct the daemon to stop accepting new connections */
+    stop_everything = 1;
+
+}
+
+/**
+ * A callback for guacd_proc_map_foreach which will stop every process in the
+ * map.
+ *
+ * @param proc
+ *     The guacd process to stop.
+ *
+ * @param data
+ *     Unused.
+ */
+static void stop_process_callback(guacd_proc* proc, void* data) {
+
+    guacd_log(GUAC_LOG_DEBUG,
+            "Killing connection %s (%i)\n",
+            proc->client->connection_id, (int) proc->pid);
+
+    guacd_proc_stop(proc);
+
+}
 
 int main(int argc, char* argv[]) {
 
@@ -274,6 +321,14 @@ int main(int argc, char* argv[]) {
 
     /* General */
     int retval;
+
+#ifdef HAVE_DECL_PTHREAD_SETATTR_DEFAULT_NP
+    /* Set default stack size */
+    pthread_attr_t default_pthread_attr;
+    pthread_attr_init(&default_pthread_attr);
+    pthread_attr_setstacksize(&default_pthread_attr, GUACD_THREAD_STACK_SIZE);
+    pthread_setattr_default_np(&default_pthread_attr);
+#endif // HAVE_DECL_PTHREAD_SETATTR_DEFAULT_NP
 
     /* Load configuration */
     guacd_config* config = guacd_conf_load();
@@ -457,6 +512,11 @@ int main(int argc, char* argv[]) {
                 "Child processes may pile up in the process table.");
     }
 
+    /* Clean up and exit if SIGINT or SIGTERM signals are caught */
+    struct sigaction signal_stop_action = { .sa_handler = signal_stop_handler };
+    sigaction(SIGINT, &signal_stop_action, NULL);
+    sigaction(SIGTERM, &signal_stop_action, NULL);
+
     /* Log listening status */
     guacd_log(GUAC_LOG_INFO, "Listening on host %s, port %s", bound_address, bound_port);
 
@@ -470,7 +530,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* Daemon loop */
-    for (;;) {
+    while (!stop_everything) {
 
         pthread_t child_thread;
 
@@ -480,12 +540,21 @@ int main(int argc, char* argv[]) {
                 (struct sockaddr*) &client_addr, &client_addr_len);
 
         if (connected_socket_fd < 0) {
-            guacd_log(GUAC_LOG_ERROR, "Could not accept client connection: %s", strerror(errno));
+            if (errno == EINTR)
+                guacd_log(GUAC_LOG_DEBUG, "Accepting of further client connection(s) interrupted by signal.");
+            else
+                guacd_log(GUAC_LOG_ERROR, "Could not accept client connection: %s", strerror(errno));
             continue;
         }
 
+        /* Set TCP_NODELAY to avoid any latency that would otherwise be added by the OS'
+         * networking stack and Nagle's algorithm */
+        const int SO_TRUE = 1;
+        setsockopt(connected_socket_fd, IPPROTO_TCP, TCP_NODELAY,
+                (const void*) &SO_TRUE, sizeof(SO_TRUE));
+
         /* Create parameters for connection thread */
-        guacd_connection_thread_params* params = malloc(sizeof(guacd_connection_thread_params));
+        guacd_connection_thread_params* params = guac_mem_alloc(sizeof(guacd_connection_thread_params));
         if (params == NULL) {
             guacd_log(GUAC_LOG_ERROR, "Could not create connection thread: %s", strerror(errno));
             continue;
@@ -501,6 +570,26 @@ int main(int argc, char* argv[]) {
         /* Spawn thread to handle connection */
         pthread_create(&child_thread, NULL, guacd_connection_thread, params);
         pthread_detach(child_thread);
+
+    }
+
+    /* Stop all connections */
+    if (map != NULL) {
+
+        guacd_proc_map_foreach(map, stop_process_callback, NULL);
+
+        /*
+         * FIXME: Clean up the proc map. This is not as straightforward as it
+         * might seem, since the detached connection threads will attempt to
+         * remove the connection processes from the map when they complete,
+         * which will also happen upon shutdown. So there's a good chance that
+         * this map cleanup will happen at the same time as the thread cleanup.
+         * The map _does_ have locking mechanisms in place for ensuring thread
+         * safety, but cleaning up the map also requires destroying those locks,
+         * making them unusable for this case. One potential fix could be to
+         * join every one of the connection threads instead of detaching them,
+         * but that does complicate the cleanup of thread resources.
+         */
 
     }
 

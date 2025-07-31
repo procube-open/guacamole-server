@@ -17,7 +17,6 @@
  * under the License.
  */
 
-
 #ifndef _GUAC_TERMINAL_DISPLAY_H
 #define _GUAC_TERMINAL_DISPLAY_H
 
@@ -26,7 +25,6 @@
  *
  * @file display.h
  */
-
 
 #include "common/surface.h"
 #include "palette.h"
@@ -227,6 +225,12 @@ typedef struct guac_terminal_display {
      */
     int selection_end_column;
 
+    /**
+     * Whether there are GUAC_CHAR_SET operations that need to be flushed
+     * to the display.
+     */
+    bool unflushed_set;
+
 } guac_terminal_display;
 
 /**
@@ -320,25 +324,39 @@ void guac_terminal_display_resize(guac_terminal_display* display, int width, int
 
 /**
  * Flushes all pending operations within the given guac_terminal_display.
+ *
+ * @param display
+ *     The terminal display whose pending operations are being flushed.
+ */
+void guac_terminal_display_flush_operations(guac_terminal_display* display);
+
+/**
+ * Flushes all pending operations within the given guac_terminal_display,
+ * then flushes the display surface.
+ *
+ * @param display
+ *     The terminal display to flush.
  */
 void guac_terminal_display_flush(guac_terminal_display* display);
 
 /**
- * Initializes and syncs the current terminal display state for the given user
- * that has just joined the connection, sending the necessary instructions to
- * completely recreate and redraw the terminal rendering over the given socket.
+ * Initializes and syncs the current terminal display state for all joining
+ * users associated with the provided socket, sending the necessary instructions
+ * to completely recreate and redraw the terminal rendering over the given
+ * socket.
  *
  * @param display
- *     The terminal display to sync to the given user.
+ *     The terminal display to sync to the users associated with the provided
+ *     socket.
  *
- * @param user
- *     The user that has just joined the connection.
+ * @param client
+ *     The client whose users are joining.
  *
  * @param socket
  *     The socket over which any necessary instructions should be sent.
  */
-void guac_terminal_display_dup(guac_terminal_display* display, guac_user* user,
-        guac_socket* socket);
+void guac_terminal_display_dup(
+        guac_terminal_display* display, guac_client* client, guac_socket* socket);
 
 /**
  * Draws the text selection rectangle from the given coordinates to the given end coordinates.

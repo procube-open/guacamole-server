@@ -29,25 +29,39 @@ ACLOCAL_AMFLAGS = -I m4
 lib_LTLIBRARIES = libguac.la
 SUBDIRS = . tests
 
+#
+# Public headers
+#
+
 libguacincdir = $(includedir)/guacamole
 
 libguacinc_HEADERS =                  \
     guacamole/argv.h                  \
     guacamole/argv-constants.h        \
     guacamole/argv-fntypes.h          \
+    guacamole/assert.h                \
     guacamole/audio.h                 \
     guacamole/audio-fntypes.h         \
     guacamole/audio-types.h           \
-    guacamole/client-constants.h      \
     guacamole/client.h                \
+    guacamole/client-constants.h      \
     guacamole/client-fntypes.h        \
     guacamole/client-types.h          \
+    guacamole/display.h               \
+    guacamole/display-constants.h     \
+    guacamole/display-types.h         \
     guacamole/error.h                 \
     guacamole/error-types.h           \
+    guacamole/fifo.h                  \
+    guacamole/fifo-constants.h        \
+    guacamole/fifo-types.h            \
     guacamole/fips.h                  \
+    guacamole/flag.h                  \
+    guacamole/flag-types.h            \
     guacamole/hash.h                  \
     guacamole/layer.h                 \
     guacamole/layer-types.h           \
+    guacamole/mem.h                   \
     guacamole/object.h                \
     guacamole/object-types.h          \
     guacamole/parser-constants.h      \
@@ -61,13 +75,17 @@ libguacinc_HEADERS =                  \
     guacamole/protocol-constants.h    \
     guacamole/protocol-types.h        \
     guacamole/recording.h             \
-    guacamole/socket-constants.h      \
+    guacamole/rect.h                  \
+    guacamole/rect-types.h            \
+    guacamole/rwlock.h                \
     guacamole/socket.h                \
+    guacamole/socket-constants.h      \
     guacamole/socket-fntypes.h        \
     guacamole/socket-types.h          \
     guacamole/stream.h                \
     guacamole/stream-types.h          \
     guacamole/string.h                \
+    guacamole/tcp.h                   \
     guacamole/timestamp.h             \
     guacamole/timestamp-types.h       \
     guacamole/unicode.h               \
@@ -78,43 +96,77 @@ libguacinc_HEADERS =                  \
     guacamole/wol.h                   \
     guacamole/wol-constants.h
 
-noinst_HEADERS =      \
-    id.h              \
-    encode-jpeg.h     \
-    encode-png.h      \
-    palette.h         \
-    user-handlers.h   \
-    raw_encoder.h     \
+#
+# Private, installed headers
+#
+
+libguacprivincdir = $(includedir)/guacamole/private
+
+libguacprivinc_HEADERS =              \
+    guacamole/private/mem.h
+
+#
+# Private, non-installed headers
+#
+
+noinst_HEADERS =              \
+    display-builtin-cursors.h \
+    display-plan.h            \
+    display-priv.h            \
+    encode-jpeg.h             \
+    encode-png.h              \
+    id.h                      \
+    palette.h                 \
+    raw_encoder.h             \
+    user-handlers.h           \
     wait-fd.h
 
-libguac_la_SOURCES =   \
-    argv.c             \
-    audio.c            \
-    client.c           \
-    encode-jpeg.c      \
-    encode-png.c       \
-    error.c            \
-    fips.c             \
-    hash.c             \
-    id.c               \
-    palette.c          \
-    parser.c           \
-    pool.c             \
-    protocol.c         \
-    raw_encoder.c      \
-    recording.c        \
-    socket.c           \
-    socket-broadcast.c \
-    socket-fd.c        \
-    socket-nest.c      \
-    socket-tee.c       \
-    string.c           \
-    timestamp.c        \
-    unicode.c          \
-    user.c             \
-    user-handlers.c    \
-    user-handshake.c   \
-    wait-fd.c	       \
+libguac_la_SOURCES =          \
+    argv.c                    \
+    audio.c                   \
+    client.c                  \
+    display.c                 \
+    display-builtin-cursors.c \
+    display-cursor.c          \
+    display-flush.c           \
+    display-layer.c           \
+    display-layer-list.c      \
+    display-plan.c            \
+    display-plan-combine.c    \
+    display-plan-rect.c       \
+    display-plan-search.c     \
+    display-render-thread.c   \
+    display-worker.c          \
+    encode-jpeg.c             \
+    encode-png.c              \
+    error.c                   \
+    fifo.c                    \
+    fips.c                    \
+    flag.c                    \
+    hash.c                    \
+    id.c                      \
+    mem.c                     \
+    rwlock.c                  \
+    palette.c                 \
+    parser.c                  \
+    pool.c                    \
+    protocol.c                \
+    raw_encoder.c             \
+    recording.c               \
+    rect.c                    \
+    socket.c                  \
+    socket-broadcast.c        \
+    socket-fd.c               \
+    socket-nest.c             \
+    socket-tee.c              \
+    string.c                  \
+    tcp.c                     \
+    timestamp.c               \
+    unicode.c                 \
+    user.c                    \
+    user-handlers.c           \
+    user-handshake.c          \
+    wait-fd.c	              \
     wol.c
 
 # Compile WebP support if available
@@ -139,13 +191,14 @@ libguac_la_CFLAGS = \
     -Werror -Wall -pedantic
 
 libguac_la_LDFLAGS =     \
-    -version-info 22:0:1 \
+    -version-info 25:0:0 \
     -no-undefined        \
     @CAIRO_LIBS@         \
     @DL_LIBS@            \
     @JPEG_LIBS@          \
     @PNG_LIBS@           \
     @PTHREAD_LIBS@       \
+    @RT_LIBS@            \
     @SSL_LIBS@           \
     @UUID_LIBS@          \
     @VORBIS_LIBS@        \

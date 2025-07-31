@@ -22,12 +22,14 @@
 #include "encode-jpeg.h"
 #include "encode-png.h"
 #include "encode-webp.h"
+#include "guacamole/mem.h"
 #include "guacamole/client.h"
 #include "guacamole/object.h"
 #include "guacamole/pool.h"
 #include "guacamole/protocol.h"
 #include "guacamole/socket.h"
 #include "guacamole/stream.h"
+#include "guacamole/string.h"
 #include "guacamole/timestamp.h"
 #include "guacamole/user.h"
 #include "id.h"
@@ -40,13 +42,13 @@
 
 guac_user* guac_user_alloc() {
 
-    guac_user* user = calloc(1, sizeof(guac_user));
+    guac_user* user = guac_mem_zalloc(sizeof(guac_user));
     int i;
 
     /* Generate ID */
     user->user_id = guac_generate_id(GUAC_USER_ID_PREFIX);
     if (user->user_id == NULL) {
-        free(user);
+        guac_mem_free(user);
         return NULL;
     }
 
@@ -58,9 +60,9 @@ guac_user* guac_user_alloc() {
     /* Allocate stream pool */
     user->__stream_pool = guac_pool_alloc(0);
 
-    /* Initialze streams */
-    user->__input_streams = malloc(sizeof(guac_stream) * GUAC_USER_MAX_STREAMS);
-    user->__output_streams = malloc(sizeof(guac_stream) * GUAC_USER_MAX_STREAMS);
+    /* Initialize streams */
+    user->__input_streams = guac_mem_alloc(sizeof(guac_stream), GUAC_USER_MAX_STREAMS);
+    user->__output_streams = guac_mem_alloc(sizeof(guac_stream), GUAC_USER_MAX_STREAMS);
 
     for (i=0; i<GUAC_USER_MAX_STREAMS; i++) {
         user->__input_streams[i].index = GUAC_USER_CLOSED_STREAM_INDEX;
@@ -71,7 +73,7 @@ guac_user* guac_user_alloc() {
     user->__object_pool = guac_pool_alloc(0);
 
     /* Initialize objects */
-    user->__objects = malloc(sizeof(guac_object) * GUAC_USER_MAX_OBJECTS);
+    user->__objects = guac_mem_alloc(sizeof(guac_object), GUAC_USER_MAX_OBJECTS);
     for (i=0; i<GUAC_USER_MAX_OBJECTS; i++)
         user->__objects[i].index = GUAC_USER_UNDEFINED_OBJECT_INDEX;
 
@@ -82,21 +84,21 @@ guac_user* guac_user_alloc() {
 void guac_user_free(guac_user* user) {
 
     /* Free streams */
-    free(user->__input_streams);
-    free(user->__output_streams);
+    guac_mem_free(user->__input_streams);
+    guac_mem_free(user->__output_streams);
 
     /* Free stream pool */
     guac_pool_free(user->__stream_pool);
 
     /* Free objects */
-    free(user->__objects);
+    guac_mem_free(user->__objects);
 
     /* Free object pool */
     guac_pool_free(user->__object_pool);
 
     /* Clean up user */
-    free(user->user_id);
-    free(user);
+    guac_mem_free(user->user_id);
+    guac_mem_free(user);
 
 }
 
@@ -105,12 +107,10 @@ guac_stream* guac_user_alloc_stream(guac_user* user) {
     guac_stream* allocd_stream;
     int stream_index;
 
-    /* Refuse to allocate beyond maximum */
-    if (user->__stream_pool->active == GUAC_USER_MAX_STREAMS)
+    /* Allocate stream, but refuse to allocate beyond maximum */
+    stream_index = guac_pool_next_int_below(user->__stream_pool, GUAC_USER_MAX_STREAMS);
+    if (stream_index < 0)
         return NULL;
-
-    /* Allocate stream */
-    stream_index = guac_pool_next_int(user->__stream_pool);
 
     /* Initialize stream with even index (odd indices are client-level) */
     allocd_stream = &(user->__output_streams[stream_index]);
@@ -126,11 +126,12 @@ guac_stream* guac_user_alloc_stream(guac_user* user) {
 
 void guac_user_free_stream(guac_user* user, guac_stream* stream) {
 
-    /* Release index to pool */
-    guac_pool_free_int(user->__stream_pool, stream->index / 2);
-
     /* Mark stream as closed */
+    int freed_index = stream->index;
     stream->index = GUAC_USER_CLOSED_STREAM_INDEX;
+
+    /* Release index to pool */
+    guac_pool_free_int(user->__stream_pool, freed_index / 2);
 
 }
 
@@ -139,12 +140,10 @@ guac_object* guac_user_alloc_object(guac_user* user) {
     guac_object* allocd_object;
     int object_index;
 
-    /* Refuse to allocate beyond maximum */
-    if (user->__object_pool->active == GUAC_USER_MAX_OBJECTS)
+    /* Allocate object, but refuse to allocate beyond maximum */
+    object_index = guac_pool_next_int_below(user->__object_pool, GUAC_USER_MAX_OBJECTS);
+    if (object_index < 0)
         return NULL;
-
-    /* Allocate object */
-    object_index = guac_pool_next_int(user->__object_pool);
 
     /* Initialize object */
     allocd_object = &(user->__objects[object_index]);
@@ -159,11 +158,12 @@ guac_object* guac_user_alloc_object(guac_user* user) {
 
 void guac_user_free_object(guac_user* user, guac_object* object) {
 
-    /* Release index to pool */
-    guac_pool_free_int(user->__object_pool, object->index);
-
     /* Mark object as undefined */
+    int freed_index = object->index;
     object->index = GUAC_USER_UNDEFINED_OBJECT_INDEX;
+
+    /* Release index to pool */
+    guac_pool_free_int(user->__object_pool, freed_index);
 
 }
 
@@ -377,12 +377,12 @@ char* guac_user_parse_args_string(guac_user* user, const char** arg_names,
         guac_user_log(user, GUAC_LOG_DEBUG, "Parameter \"%s\" omitted. Using "
                 "default value of \"%s\".", arg_names[index], default_value);
 
-        return strdup(default_value);
+        return guac_strdup(default_value);
 
     }
 
     /* Otherwise use provided value */
-    return strdup(value);
+    return guac_strdup(value);
 
 }
 
