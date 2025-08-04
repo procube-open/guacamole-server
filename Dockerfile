@@ -22,8 +22,9 @@
 #
 
 # The Alpine Linux image that should be used as the basis for the guacd image
-ARG ALPINE_BASE_IMAGE='3.18'
-FROM alpine:${ALPINE_BASE_IMAGE} AS builder
+# NOTE: Using 3.18 because the required openssl1.1-compat-dev package was
+# removed in more recent versions.
+ARG ALPINE_BASE_IMAGE=3.18
 
 # The target architecture of the build. Valid values are "ARM" and "X86". By
 # default, this is detected automatically.
@@ -311,8 +312,7 @@ COPY --from=guacamole-server ${PREFIX_DIR} ${PREFIX_DIR}
 # Bring runtime environment up to date and install runtime dependencies
 RUN apk add --no-cache                \
         ca-certificates               \
-        font-ipa                      \
-        fontconfig                    \
+        font-noto-cjk                 \
         ghostscript                   \
         netcat-openbsd                \
         shadow                        \
@@ -322,7 +322,9 @@ RUN apk add --no-cache                \
         util-linux-login && \
     xargs apk add --no-cache < ${PREFIX_DIR}/DEPENDENCIES
 
-RUN fc-cache -f
+# Runtime environment
+ENV LC_ALL=C.UTF-8
+ENV LD_LIBRARY_PATH=${PREFIX_DIR}/lib
 
 # Checks the operating status every 5 minutes with a timeout of 5 seconds
 HEALTHCHECK --interval=5m --timeout=5s CMD nc -z 127.0.0.1 4822 || exit 1
@@ -333,14 +335,8 @@ ARG GID=1000
 RUN groupadd --gid $GID guacd
 RUN useradd --system --create-home --shell /sbin/nologin --uid $UID --gid $GID guacd
 
-RUN mkdir /var/lib/guacamole
-RUN chown guacd:guacd /var/lib/guacamole
-
 # Run with user guacd
 USER guacd
-
-RUN mkdir /var/lib/guacamole/drives
-RUN mkdir /var/lib/guacamole/recordings
 
 # Expose the default listener port
 EXPOSE 4822

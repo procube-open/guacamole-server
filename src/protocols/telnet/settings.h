@@ -81,7 +81,6 @@ typedef struct guac_telnet_settings {
     char* port;
 
     /**
-<<<<<<< HEAD
      * コンソールサーバーへの接続かどうか？
      */
     char* console;
@@ -90,11 +89,10 @@ typedef struct guac_telnet_settings {
      * The regular expression to use when searching for the console prompt.
      */
     regex_t* console_regex;
-=======
+    /**
      * The number of seconds to wait for a connection before timing out.
      */
     int timeout;
->>>>>>> upstream/main
 
     /**
      * The name of the user to login as, if any. If no username is specified,
